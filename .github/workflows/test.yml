@@ -1,0 +1,97 @@
+name: Self-Test
+
+# This is the repo's OWN CI — it lints and unit-tests the action's logic.
+# It is NOT an example of how a consumer would use Deploy-Drift Guard in
+# their own deploy workflow; see README.md for that.
+
+on:
+  push:
+    paths:
+      - 'projects/deploy-drift-guard/**'
+  pull_request:
+    paths:
+      - 'projects/deploy-drift-guard/**'
+  workflow_dispatch: {}
+
+defaults:
+  run:
+    working-directory: projects/deploy-drift-guard
+
+jobs:
+  self-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sanity-check action.yml structure
+        run: |
+          node -e "
+            const fs = require('fs');
+            const yaml = fs.readFileSync('action.yml', 'utf8');
+            const required = ['name:', 'description:', \"using: 'node20'\", 'main:'];
+            for (const token of required) {
+              if (!yaml.includes(token)) {
+                console.error('action.yml missing expected token: ' + token);
+                process.exit(1);
+              }
+            }
+            console.log('action.yml looks structurally sane.');
+          "
+
+      - name: Lint (syntax check)
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Smoke-test the action entrypoint against a local HTTP server
+        run: |
+          node -e "
+            const http = require('http');
+            const { spawnSync } = require('child_process');
+
+            const expected = 'deadbeef1234567890deadbeef1234567890dead';
+
+            const server = http.createServer((req, res) => {
+              res.setHeader('x-deployed-sha', expected);
+              res.end('ok');
+            });
+
+            server.listen(0, () => {
+              const port = server.address().port;
+              const env = Object.assign({}, process.env, {
+                INPUT_URL: 'http://127.0.0.1:' + port,
+                INPUT_EXPECTED_SHA: expected,
+                INPUT_SHA_HEADER: 'x-deployed-sha',
+                INPUT_JSON_PATH: '',
+                INPUT_MIN_MATCH_LENGTH: '7',
+                INPUT_TIMEOUT_MS: '5000',
+                INPUT_FAIL_ON_DRIFT: 'true',
+                GITHUB_OUTPUT: '/tmp/drift-guard-smoke-output.txt',
+              });
+
+              const result = spawnSync('node', ['index.js'], { env, encoding: 'utf8' });
+              server.close();
+
+              console.log(result.stdout);
+              console.error(result.stderr);
+
+              if (result.status !== 0) {
+                console.error('Smoke test expected exit code 0 (match), got ' + result.status);
+                process.exit(1);
+              }
+
+              const fs = require('fs');
+              const output = fs.readFileSync('/tmp/drift-guard-smoke-output.txt', 'utf8');
+              if (!output.includes('status=match')) {
+                console.error('Smoke test expected status=match in GITHUB_OUTPUT, got:\n' + output);
+                process.exit(1);
+              }
+
+              console.log('Smoke test passed: matching SHA via header produced status=match.');
+            });
+          "

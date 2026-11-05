@@ -1,0 +1,88 @@
+name: 'Deploy-Drift Guard'
+description: >
+  Catches silent deploy failures — CI says "deployed", but production is
+  still serving an old commit. Compares the commit SHA that should be live
+  against a SHA your live app reports about itself. No API tokens, no deploy
+  platform credentials, no secrets required.
+author: 'Aleksey Fomochkin'
+branding:
+  icon: 'alert-triangle'
+  color: 'orange'
+
+inputs:
+  url:
+    description: >
+      Public URL of the deployed app to check for its live commit SHA.
+      Can be a dedicated version endpoint (e.g. "https://example.com/api/version"
+      or "https://example.com/version.txt") or the site root, if the SHA is
+      exposed there via a response header.
+    required: true
+
+  expected-sha:
+    description: >
+      The commit SHA that is expected to be live right now. Defaults to the
+      SHA that triggered this workflow run, which is almost always what you
+      want for a post-deploy verification step.
+    required: false
+    default: ${{ github.sha }}
+
+  sha-header:
+    description: >
+      Name of the HTTP response header that carries the deployed commit SHA.
+      Checked first, before the JSON body or plain-text body. Header lookup
+      is case-insensitive, matching HTTP semantics.
+    required: false
+    default: 'x-deployed-sha'
+
+  json-path:
+    description: >
+      Dot-notation path to the SHA field inside a JSON response body, e.g.
+      "sha" or "data.commit.sha". Array indices are supported, e.g.
+      "commits.0.sha". If left empty, a handful of common field names
+      (sha, commitSha, commit_sha, commit.sha, gitSha, version) are tried
+      automatically whenever the response body parses as JSON.
+    required: false
+    default: ''
+
+  min-match-length:
+    description: >
+      Minimum number of hex characters a candidate value must have to be
+      treated as a real commit SHA. Guards against accidental matches on
+      short, non-SHA strings. Git short SHAs are usually 7+ characters.
+    required: false
+    default: '7'
+
+  timeout-ms:
+    description: 'Timeout in milliseconds for the request to "url".'
+    required: false
+    default: '10000'
+
+  fail-on-drift:
+    description: >
+      If "true" (default), a CONFIRMED SHA mismatch fails this step. If
+      "false", a mismatch is reported as a warning only and the step still
+      succeeds (useful while rolling this out before trusting it fully).
+
+      Note: if no SHA can be extracted at all (misconfigured inputs,
+      endpoint down, unexpected response shape), this action ALWAYS warns
+      rather than fails, regardless of this setting — a bad config or a
+      temporarily-unreachable endpoint shouldn't be able to silently break
+      everyone's CI on day one.
+    required: false
+    default: 'true'
+
+outputs:
+  status:
+    description: 'One of: match, drift, not-found, error.'
+  deployed-sha:
+    description: 'The commit SHA extracted from the live deployment, if any was found.'
+  expected-sha:
+    description: 'The commit SHA that was expected to be live (echoes the resolved input).'
+  drift-detected:
+    description: >
+      "true" if a mismatch was confirmed, "false" if the SHAs matched,
+      "unknown" if no SHA could be extracted from the response at all.
+
+runs:
+  using: 'node20'
+  main: 'index.js'

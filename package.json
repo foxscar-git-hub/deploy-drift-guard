@@ -1,0 +1,26 @@
+{
+  "name": "deploy-drift-guard",
+  "version": "1.0.0",
+  "description": "GitHub Action that detects silent deploy failures by comparing the expected commit SHA against the SHA a live deployment reports about itself. No API tokens or secrets required.",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "test": "node test/index.test.js",
+    "lint": "node --check index.js && node --check test/index.test.js"
+  },
+  "license": "MIT",
+  "author": "Aleksey Fomochkin",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": [
+    "github-action",
+    "deploy",
+    "ci",
+    "cd",
+    "drift-detection",
+    "deployment-verification"
+  ]
+}
