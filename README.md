@@ -36,7 +36,12 @@ Vercel, Netlify, Fly.io, a bare EC2 box, or anything else that serves HTTP.
    - **(c) a plain-text body that IS the SHA** (e.g. a `/version.txt` endpoint)
 4. It compares that SHA against `expected-sha` (defaults to `github.sha` —
    the commit that triggered the workflow). Short and long SHAs both work;
-   they're compared up to the length of whichever one is shorter.
+   they're compared up to the length of whichever one is shorter. A
+   deployed value must have at least `min-match-length` hex characters
+   (7 by default — the same floor Git itself treats as collision-safe for
+   typical repo sizes) before it's accepted as a SHA at all, so lowering
+   that input is what trades collision-safety for leniency, not the
+   default.
 5. **Match** → step passes. **Mismatch** → step fails (configurable).
    **Couldn't find a SHA at all** → step warns, never fails — a
    misconfigured header name shouldn't break everyone's CI on day one.
