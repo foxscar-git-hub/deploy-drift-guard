@@ -185,6 +185,21 @@ function logError(message) {
   console.log(`::error::${message}`);
 }
 
+/**
+ * Report a "could not verify" condition (unreachable endpoint, non-2xx
+ * response, no SHA found). Warns by default; fails the step instead when
+ * `failOnError` is true, so this can't stay silently broken forever once
+ * someone has confirmed the happy path works.
+ */
+function reportUnverifiable(message, failOnError) {
+  if (failOnError) {
+    logError(message);
+    process.exitCode = 1;
+  } else {
+    logWarning(message);
+  }
+}
+
 async function fetchWithTimeout(url, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -209,6 +224,7 @@ async function run() {
   const minMatchLength = getNumberInput('min-match-length', 7);
   const timeoutMs = getNumberInput('timeout-ms', 10000);
   const failOnDrift = getBooleanInput('fail-on-drift', true);
+  const failOnError = getBooleanInput('fail-on-error', false);
 
   if (!url) {
     logError('Input "url" is required.');
@@ -241,10 +257,10 @@ async function run() {
     const message = err && err.name === 'AbortError'
       ? `Request to ${url} timed out after ${timeoutMs}ms.`
       : `Request to ${url} failed: ${err && err.message ? err.message : err}`;
-    logWarning(
+    reportUnverifiable(
       `${message} Could not determine the deployed SHA, so no drift check was ` +
-        'performed. This is reported as a warning, not a failure, so a flaky ' +
-        'or misconfigured endpoint cannot silently break CI.'
+        'performed.',
+      failOnError
     );
     setOutput('status', 'error');
     setOutput('expected-sha', expectedSha);
@@ -253,9 +269,10 @@ async function run() {
   }
 
   if (!response.ok) {
-    logWarning(
+    reportUnverifiable(
       `Request to ${url} returned HTTP ${response.status}. Could not determine ` +
-        'the deployed SHA, so no drift check was performed.'
+        'the deployed SHA, so no drift check was performed.',
+      failOnError
     );
     setOutput('status', 'error');
     setOutput('expected-sha', expectedSha);
@@ -272,11 +289,12 @@ async function run() {
   setOutput('expected-sha', expectedSha);
 
   if (!deployedSha) {
-    logWarning(
+    reportUnverifiable(
       `Could not find a commit SHA in the response from ${url} (checked header ` +
         `"${shaHeader}", JSON body${jsonPath ? ` at path "${jsonPath}"` : ' (common field names)'}, ` +
         'and plain-text body). No drift check was performed. See the README for ' +
-        'how to expose the SHA from your app.'
+        'how to expose the SHA from your app.',
+      failOnError
     );
     setOutput('status', 'not-found');
     setOutput('drift-detected', 'unknown');

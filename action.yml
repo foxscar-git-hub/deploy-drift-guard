@@ -64,12 +64,26 @@ inputs:
       succeeds (useful while rolling this out before trusting it fully).
 
       Note: if no SHA can be extracted at all (misconfigured inputs,
-      endpoint down, unexpected response shape), this action ALWAYS warns
-      rather than fails, regardless of this setting — a bad config or a
-      temporarily-unreachable endpoint shouldn't be able to silently break
-      everyone's CI on day one.
+      endpoint down, unexpected response shape), this setting has no effect —
+      see "fail-on-error" below for that case.
     required: false
     default: 'true'
+
+  fail-on-error:
+    description: >
+      If "true", this step fails whenever a drift check could not be
+      performed at all — the endpoint was unreachable, timed out, returned
+      a non-2xx status, or no SHA could be extracted from the response. If
+      "false" (default), these cases are reported as a warning and the step
+      still succeeds, so a flaky network blip or a config that hasn't been
+      wired up yet can't silently break CI.
+
+      Set this to "true" once you've confirmed the endpoint and extraction
+      settings work, so a broken health-check path (e.g. the URL starts
+      404'ing, or the app stops exposing its SHA) is caught instead of
+      silently skipping the check forever.
+    required: false
+    default: 'false'
 
 outputs:
   status:

@@ -18,6 +18,7 @@ const {
   extractShaFromJson,
   compareShas,
   extractDeployedSha,
+  run,
 } = require('../index.js');
 
 // ---------------------------------------------------------------------------
@@ -200,4 +201,70 @@ test('extractDeployedSha respects an explicit json-path over common field names'
   });
   assert.equal(result.sha, 'cafefeed1');
   assert.equal(result.source, 'json');
+});
+
+// ---------------------------------------------------------------------------
+// run() — fail-on-error wiring for "could not verify" outcomes
+// ---------------------------------------------------------------------------
+
+async function withRun(env, fetchImpl, fn) {
+  const originalFetch = global.fetch;
+  const originalEnv = { ...process.env };
+  const originalExitCode = process.exitCode;
+  global.fetch = fetchImpl;
+  process.exitCode = undefined;
+  Object.assign(process.env, env);
+  try {
+    await run();
+    return process.exitCode;
+  } finally {
+    global.fetch = originalFetch;
+    process.env = originalEnv;
+    process.exitCode = originalExitCode;
+  }
+}
+
+test('run() warns (exitCode unset) on a non-2xx response when fail-on-error is unset', async () => {
+  const exitCode = await withRun(
+    { INPUT_URL: 'https://example.com', INPUT_EXPECTED_SHA: 'a'.repeat(40) },
+    async () => ({ ok: false, status: 503, headers: { get: () => undefined }, text: async () => '' }),
+  );
+  assert.equal(exitCode, undefined);
+});
+
+test('run() fails (exitCode 1) on a non-2xx response when fail-on-error is true', async () => {
+  const exitCode = await withRun(
+    {
+      INPUT_URL: 'https://example.com',
+      INPUT_EXPECTED_SHA: 'a'.repeat(40),
+      INPUT_FAIL_ON_ERROR: 'true',
+    },
+    async () => ({ ok: false, status: 503, headers: { get: () => undefined }, text: async () => '' }),
+  );
+  assert.equal(exitCode, 1);
+});
+
+test('run() fails (exitCode 1) when no SHA can be found and fail-on-error is true', async () => {
+  const exitCode = await withRun(
+    {
+      INPUT_URL: 'https://example.com',
+      INPUT_EXPECTED_SHA: 'a'.repeat(40),
+      INPUT_FAIL_ON_ERROR: 'true',
+    },
+    async () => ({ ok: true, status: 200, headers: { get: () => undefined }, text: async () => 'no sha here' }),
+  );
+  assert.equal(exitCode, 1);
+});
+
+test('run() does not fail on a confirmed match even when fail-on-error is true', async () => {
+  const sha = 'a'.repeat(40);
+  const exitCode = await withRun(
+    {
+      INPUT_URL: 'https://example.com',
+      INPUT_EXPECTED_SHA: sha,
+      INPUT_FAIL_ON_ERROR: 'true',
+    },
+    async () => ({ ok: true, status: 200, headers: { get: () => undefined }, text: async () => sha }),
+  );
+  assert.equal(exitCode, undefined);
 });

@@ -189,7 +189,8 @@ itself looks like a hex commit SHA and uses it directly.
 | `json-path` | no | `''` | Dot-path into a JSON body, e.g. `data.commit.sha`. Empty = try common field names automatically. |
 | `min-match-length` | no | `7` | Minimum hex chars required to treat a found value as a real SHA. |
 | `timeout-ms` | no | `10000` | Request timeout for fetching `url`. |
-| `fail-on-drift` | no | `true` | Hard-fail the step on a confirmed mismatch. Set `false` to warn-only while you build trust in the signal. A "couldn't find any SHA" result always warns, regardless of this setting. |
+| `fail-on-drift` | no | `true` | Hard-fail the step on a confirmed mismatch. Set `false` to warn-only while you build trust in the signal. |
+| `fail-on-error` | no | `false` | Hard-fail the step when the check couldn't be performed at all (endpoint unreachable, timed out, non-2xx, or no SHA found in the response). Defaults to warn-only so a flaky network blip or a not-yet-wired-up endpoint can't silently break CI on day one — flip to `true` once you've confirmed the happy path works, so a broken health-check path gets caught instead of warning forever. |
 
 ## Outputs
 
